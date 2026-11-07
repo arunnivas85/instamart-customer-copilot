@@ -570,3 +570,126 @@ Therefore the outputs explicitly distinguish rule-validated classifications
 from tickets requiring human review; no invalid answer is silently guessed.
 
 ## PART C ENDS ##
+
+
+## PART D BEGINS ##
+
+### Reproduce Part D
+
+After Part A has created `data/instamart.db`, run:
+
+```powershell
+python -m src.refund_agent
+```
+
+This evaluates the policy assistant with 10-word overlap and with zero
+overlap, runs the seven refund scenarios and safety/resume demonstrations, and
+appends JSONL records to `outputs/agent_runs.jsonl` and
+`outputs/refund_ledger.jsonl`. Checkpoints are written under `state/`.
+`python run_test.py` also runs Part D after the earlier project parts.
+Each run-log record includes the scenario ID, status, final answer, model calls,
+tokens, and every tool's name, arguments, and observation.
+
+### Policy chunking, retrieval, and grounded answers
+
+Each policy document is split on whitespace into 40-word chunks, advancing
+30 words each time for a 10-word overlap. The final chunk is included once its
+end reaches or passes the document's final word. The 15 chunks are distributed
+as follows:
+
+| Source | Chunks |
+|---|---:|
+| `refund_policy.txt` | 4 |
+| `delivery_policy.txt` | 3 |
+| `escalation_policy.txt` | 3 |
+| `payment_policy.txt` | 3 |
+| `privacy_policy.txt` | 2 |
+
+`TfidfVectorizer()` is fitted on the chunk texts; retrieval transforms the
+query with that same vectorizer and ranks chunk vectors by cosine similarity.
+Term frequency (TF) measures how often a word occurs in a chunk. Inverse
+document frequency (IDF) downweights words appearing in many chunks; one
+limitation is that TF-IDF can miss semantically equivalent phrasings when the
+query and policy use different words. The top three results for
+`refund policy late delivery` all come from `refund_policy.txt`.
+
+The assistant sends exactly two messages to `mock_llm.chat`: a system message
+containing `POLICY ASSISTANT` and requiring context-only answers with an
+explicit “I could not find” fallback, and a user message formatted as
+`CONTEXT:`, the three `[source-file]`-prefixed chunks, then `QUESTION:` and the
+question. `answer(question)` returns the answer, unique source names, and the
+retrieved passages.
+
+| Chunking | Answerable with expected source in top 3 | Answerable with expected fact in answer | Unanswerable with fallback |
+|---|---:|---:|---:|
+| 40 words, 10-word overlap | 12/12 | 12/12 | 2/2 |
+| 40 words, zero overlap | 12/12 | 10/12 | 2/2 |
+
+With zero overlap, “What delivery time makes a completed order eligible for a
+full refund?” loses the expected phrase `more than 45 minutes`: it is split
+from the rest of the full-refund sentence at a chunk boundary, so retrieval
+returns a chunk containing only the latter half. The payment answer about a
+failed deduction also breaks because `within 48 hours` begins the next chunk;
+overlap keeps these cross-boundary facts available together.
+
+### Refund tools and ReAct loop
+
+`TOOLS_SPEC` defines the five functions in `TOOL_MAP`, with a one-sentence
+description and JSON object parameters:
+
+| Tool | Parameters | Behavior |
+|---|---|---|
+| `get_order` | `order_id: string` | Reads the order's status, amount, and delivery minutes from `data/instamart.db`, or returns `{"error":"order not found"}`. |
+| `search_policy` | `query: string` | Returns the top three retrieved passages under `results`. |
+| `calculate_refund` | `order_amount: number`, `delivery_minutes: number or null` | A verified completed order gets its full amount only when delivery exceeded 45 minutes; otherwise the refund is zero. |
+| `issue_refund` | `order_id: string`, `refund_inr: number` | Validates the completed order and exact eligible amount, rejects values above INR 1000, and appends a timestamped ledger line. |
+| `escalate_to_human` | `order_id: string`, `refund_inr: number` | Validates the completed order and amount above INR 1000, and appends a timestamped ledger line without issuing money. |
+
+The agent verifies status using `get_order` before calculation; that verified
+status is supplied to `calculate_refund`, preventing cancelled orders from
+receiving a refund. The issue and escalation tools independently re-check the
+database order, delivery threshold, and amount before recording an action.
+Tool observations are JSON appended to the conversation. The normal final
+status is the token before the colon in the model's final answer.
+
+| Scenario | Status | Refund (INR) | Model calls | Tokens used |
+|---|---|---:|---:|---:|
+| S1 | REFUND | 128.25 | 5 | 957 |
+| S2 | REFUND | 135.00 | 5 | 957 |
+| S3 | ESCALATE | 1,999.00 | 5 | 944 |
+| S4 | DENIED | 0.00 | 4 | 653 |
+| S5 | DENIED | 0.00 | 3 | 373 |
+| S6 | NOT_FOUND | 0.00 | 2 | 96 |
+| S7 | FALLBACK_MAX_ITERATIONS | 0.00 | 6 | 3,072 |
+
+S7 uses all six allowed model calls at the default 6,000-token cap before
+falling back; it does not execute a seventh request. With S1, a token limit of
+200 yields `FALLBACK_TOKEN_LIMIT` after 3 calls and 390 accumulated tokens,
+without executing the tool requested by the over-limit call. A time limit of
+0 yields `FALLBACK_TIMEOUT` before any model call (0 calls, 0 tokens).
+
+### Checkpoint and resume
+
+After every tool observation, `state/<run_id>.json` stores the complete message
+history, scenario and run IDs, accumulated tokens and model calls, step number,
+completed steps, and executed tool names. For the S1 crash demonstration, the
+simulated crash is raised only after the second tool execution's checkpoint is
+written; `resume_agent(run_id)` continues from that checkpoint. The ordered
+tools across the crash and resume are exactly `get_order`, `search_policy`,
+`calculate_refund`, `issue_refund`—four executions total, with no repeats.
+The resumed result is `REFUND: INR 128.25 issued.` and status `REFUND`.
+
+### ReAct versus plan-and-execute
+
+ReAct used 5 calls for S1, 3 for S5, and 2 for S6; its cumulative prompt and
+observation tokens are included in the table above. A plan-and-execute design
+could ask for the complete tool sequence in one model call and use fewer calls
+and often fewer tokens, then replan only when an observation contradicts the
+plan. However, an unexpected `NOT_FOUND` response or a cancelled order must
+stop the refund path rather than blindly executing a previously generated
+sequence. For this refund workflow I prefer ReAct: the extra calls are
+manageable for short requests, and each next action is conditioned on the
+verified database and policy observations. The durable per-tool checkpoints
+also make this sequence resumable without replaying completed actions.
+
+## PART D ENDS ##

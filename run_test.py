@@ -2,6 +2,7 @@
 
 from src.customer_models import build_lapse_model, rfm_and_segments
 from src.triage import compare_prompts
+from src.refund_agent import run_part_d
 
 
 def main():
@@ -70,6 +71,20 @@ def main():
     print("Zero-shot confusion matrix:\n", triage["zero_shot_confusion"])
     print("Few-shot:", triage["few_shot"])
     print("6000-token zero-shot budget demo:", triage["budget_demo"])
+    print("\n=== PART D: POLICY RAG AND REFUND AGENT ===")
+    policy_report = run_part_d()
+    print("Chunk counts:", policy_report["chunk_counts_by_source"])
+    print("Policy evaluation:", policy_report["policy_eval"])
+    print("Zero-overlap evaluation:", policy_report["zero_overlap_eval"])
+    for result in policy_report["scenario_runs"]["scenarios"]:
+        print(
+            result["scenario_id"],
+            result["status"],
+            result["refund_inr"],
+            result["llm_calls"],
+            result["tokens_used"],
+        )
+    print("\nProject pipeline finished. Review outputs/ and data/instamart.db.")
 
 if __name__ == "__main__":
     main()

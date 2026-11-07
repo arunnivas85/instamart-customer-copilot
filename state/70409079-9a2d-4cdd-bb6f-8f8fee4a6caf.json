@@ -1,0 +1,53 @@
+{
+  "run_id": "70409079-9a2d-4cdd-bb6f-8f8fee4a6caf",
+  "scenario_id": "S6",
+  "messages": [
+    {
+      "role": "system",
+      "content": "AGENT: Verify the order, consult refund policy, and use only the supplied refund tools. Never refund a non-completed order."
+    },
+    {
+      "role": "user",
+      "content": "Refund for order ORD-999999 please."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "name": "get_order",
+          "arguments": {
+            "order_id": "ORD-999999"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_1",
+      "name": "get_order",
+      "content": "{\"error\": \"order not found\"}"
+    }
+  ],
+  "tokens_used": 42,
+  "step_number": 1,
+  "tools_executed": [
+    "get_order"
+  ],
+  "steps": [
+    {
+      "tool": "get_order",
+      "arguments": {
+        "order_id": "ORD-999999"
+      },
+      "observation": {
+        "error": "order not found"
+      }
+    }
+  ],
+  "llm_calls": 1,
+  "max_iterations": 6,
+  "token_limit": 6000,
+  "time_limit_seconds": 10
+}
