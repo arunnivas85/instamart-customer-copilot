@@ -291,3 +291,180 @@ The city aggregation reports the following completed-order statistics:
 ### PART A ENDS ###
 
 
+## PART B BEGINS ##
+
+### Reproduce Part B
+
+From the repository root, run:
+
+```powershell
+python run_test.py
+```
+
+The script uses `data/clean/orders.csv`, `data/clean/customers.csv`, and
+`data/clean/products.csv`. It uses fixed seeds for K-means, the stratified
+split, the random forest, and the oversampling step. It writes:
+
+- `outputs/customer_segments.csv`: `customer_id`, `recency`, `frequency`,
+  `monetary`, `segment_id`, `segment_name`, `is_premium`.
+- `outputs/lapse_model.joblib`: the selected fitted preprocessing/model
+  pipeline.
+- `outputs/retention_list.csv`: `customer_id`, `lapse_probability`,
+  `actually_lapsed`.
+
+### 1. RFM table
+
+The RFM table contains 1,175 customers with at least one completed order,
+measured at 2025-10-01 00:00:00. Recency has median 19 days, minimum 0 and
+maximum 180; frequency averages 9.46 orders and peaks at 33; monetary value
+averages INR 2,552.06 and peaks at INR 14,766.55. Recency is whole elapsed days,
+frequency counts distinct completed order IDs, and monetary is the sum of
+completed `order_amount`.
+
+### 2. K-means selection
+
+RFM columns are standardized together before fitting each model.
+
+| K | Inertia | Silhouette |
+|---:|---:|---:|
+| 2 | 1820.76 | 0.465 |
+| 3 | 1268.23 | 0.445 |
+| 4 | 743.07 | 0.526 |
+| 5 | 617.37 | 0.480 |
+| 6 | 503.17 | 0.482 |
+| 7 | 408.46 | 0.416 |
+| 8 | 366.50 | 0.412 |
+
+The sharpest elbow is at K=4, and K=4 also has the highest silhouette score in
+the business-approved choices {3, 4, 5}. Four groups give the retention team
+distinct premium, frequent, cooling-off and dormant campaign audiences without
+adding less interpretable subdivisions. Inertia at K=8 is necessarily no
+higher than at K=2 because adding centroids can only maintain or reduce the
+within-cluster sum of squared distances; that improvement alone does not
+account for added complexity or business usefulness, so it cannot determine K.
+
+### 3. Segment profiles and projection
+
+| Segment ID | Name | Customers | Mean recency (days) | Mean frequency | Mean monetary (INR) | Campaign action |
+|---:|---|---:|---:|---:|---:|---|
+| 0 | Cooling Off | 436 | 28.86 | 3.77 | 1,057.62 | Send a low-cost win-back offer and make the next purchase easy. |
+| 1 | Premium | 138 | 24.12 | 6.77 | 7,129.70 | Offer VIP service and relevant high-value bundles; this group has the highest mean monetary value. |
+| 2 | Frequent Regulars | 419 | 8.77 | 19.40 | 3,410.02 | Use replenishment reminders and loyalty rewards rather than broad discounts. |
+| 3 | Dormant | 182 | 109.04 | 2.20 | 685.99 | Run a targeted reactivation campaign and suppress repeated incentives after non-response. |
+
+The Premium flag is true only for the segment with the highest mean monetary
+value. Cluster numbers are arbitrary labels, not an ordered ranking of value,
+recency, or loyalty. PCA on the scaled RFM matrix explains 0.6343 and 0.2180 of
+the variance in its first two components (total 0.8523).
+
+### 4. Lapse cohort, features, and split
+
+The cohort includes every customer with a completed order before 2025-09-01.
+A customer is labeled lapsed when they have no completed order from
+2025-09-01 through 2025-09-30: 1,156 customers, of whom 443 (38.32%) lapsed.
+The stratified 80/20 split contains 924 training and 232 test customers.
+
+Features use only completed orders before the cutoff for recency, distinct-order
+frequency, monetary value, mean discount, mean delivery time, and favourite
+product category. Cancellation rate uses cancelled orders divided by all
+completed or cancelled orders before the cutoff. City, age, gender, and signup
+tenure are taken from the clean customer table. The September window is used
+only to create the label. No order dated 2025-09-01 or later entered the
+features, and Part 3 segment labels were not used as features.
+
+### 5. Leakage-safe preprocessing
+
+The numeric median imputer and `StandardScaler`, and categorical imputer and
+`OneHotEncoder(drop="first", handle_unknown="ignore")`, are inside a
+scikit-learn `Pipeline`/`ColumnTransformer` and fitted separately inside each
+cross-validation training fold; the final fitted preprocessing is learned from
+the training split only. Test rows are transformed, never fitted. No encoder,
+scaler, or resampler saw test rows. A code assertion verifies that the
+transformed train and test feature matrices contain no missing values.
+
+The fitted logistic pipeline's frequency-scaler mean is 8.115 orders, compared
+with the full-cohort mean of 8.029. They differ because the scaler is fitted on
+the 80% training subset only, whose sample mean need not equal the full-cohort
+mean.
+
+### 6. Tuning and test evaluation
+
+The always-not-lapsed baseline has 61.64% accuracy and lapsed-class F1 of 0;
+its confusion matrix (actual rows, predicted columns, class order 0 then 1) is
+`[[143, 0], [89, 0]]`.
+
+Both searches use five-fold CV with `scoring="f1"` and are fitted on training
+data only:
+
+- Logistic regression (`max_iter=1000`), C in {0.01, 0.1, 1, 10, 100}: best
+  C=100; best CV F1=0.651.
+- Random forest (`n_estimators=100`, `random_state=42`), `max_depth` in {3, 5,
+  8} and `min_samples_leaf` in {5, 10, 20}: best depth=8 and leaf size=10;
+  best CV F1=0.687 (45 fits).
+
+| Model | Test confusion matrix | Lapsed precision | Lapsed recall | Lapsed F1 |
+|---|---|---:|---:|---:|
+| Logistic regression | `[[111, 32], [31, 58]]` | 0.644 | 0.652 | 0.648 |
+| Random forest | `[[110, 33], [32, 57]]` | 0.633 | 0.640 | 0.637 |
+
+The confusion matrices use actual rows and predicted columns, with class order
+0 then 1. Logistic regression is selected: it has the stronger held-out
+lapsed-class precision, recall and F1 in this run, and its test F1 exceeds the
+0.55 target. Missing a customer who is about to lapse can mean losing future
+orders, so recall matters to the retention team. But contacting loyal customers
+unnecessarily spends campaign budget and can train them to wait for discounts,
+so precision also matters. The scores are a single split's estimates; campaign
+thresholds should be chosen with outreach capacity and incentive cost in mind.
+
+### 7. Training-only class-balance experiment
+
+The original logistic model scores the untouched test set at precision 0.644,
+recall 0.652 and F1 0.648. The training split has 570 non-lapsed and 354 lapsed
+rows; keeping all original rows and adding 216 replacement-sampled lapsed rows
+produces 570 of each class. The refitted logistic model scores the same,
+unchanged test set at precision 0.589, recall 0.854 and F1 0.697.
+
+Recall moves most (+0.202); precision falls by 0.055 and F1 rises by 0.049.
+The balanced model catches more likely lapsers, but also flags more loyal
+customers, so the retention team should budget for extra outreach and avoid
+automatically applying costly incentives to every flagged customer.
+
+### 8. Interpretation and persisted outputs
+
+The five largest random-forest feature importances are:
+
+| Feature | Importance | Business reading |
+|---|---:|---|
+| Monetary | 0.280 | Historical spend is the strongest split signal; protect high-value customers. |
+| Frequency | 0.278 | Order cadence is nearly as informative; regularity helps distinguish risk. |
+| Recency | 0.109 | Time since the last order is an important warning signal. |
+| Average delivery minutes | 0.060 | Delivery experience contributes to predicted risk. |
+| Cancellation rate | 0.052 | Prior cancelled orders contribute additional predictive information. |
+
+For the selected best logistic regression, the recency coefficient is positive
+(+0.039): longer time since the last order is associated with higher lapse
+odds, holding other features fixed. Frequency is negative (-1.697): more
+completed orders are associated with lower lapse odds. Cancellation rate is
+negative (-0.124) in this fitted model; this conditional association is
+counter-intuitive and should be investigated rather than interpreted as causal.
+
+The selected pipeline is saved to `outputs/lapse_model.joblib`, reloaded with
+`joblib.load`, and asserted to reproduce every original test prediction exactly.
+Among test customers marked Premium by the whole-window RFM segments, the top
+10 lapse probabilities are saved to `outputs/retention_list.csv`; 3 of the 10
+actually lapsed. The retention list is illustrative and is not a leakage-free
+evaluation because its Premium filter comes from whole-window RFM, which
+includes the September period used to define the lapse label; the model's own
+features remain limited to pre-cutoff data.
+
+### Limitations and Next Steps
+
+The lapse model and campaign metrics are based on one fixed train/test split
+and historical synthetic order data; monitor performance and recalibrate
+thresholds before a live campaign. The Premium flag is a post-hoc whole-window
+label that includes the September lapse-label window, so the retention list is
+illustrative and not a leakage-free evaluation; it must not be used to claim
+prospective campaign performance. Evaluate future campaign outcomes with
+time-based validation and an independently defined, pre-cutoff premium cohort.
+
+## PART B ENDS ##

@@ -1,20 +1,68 @@
-"""Run all project stages in sequence. Use this after installing requirements."""
-# from src.data_pipeline import audit,clean_data,validate
-from src.customer_models import rfm_and_segments,build_lapse_model
-# from src.triage import run_pipeline,FEW
-# from src.policy_rag import PolicyRAG,evaluate
+"""Run Part B segmentation, lapse modeling, and artifact generation."""
+
+from src.customer_models import build_lapse_model, rfm_and_segments
+
+
 def main():
-    # print("\n=== PART A: AUDIT / CLEAN / VALIDATE ===")
-    # audit(); clean_data(); validate()
-    # print("\n=== PART B: SEGMENTS ===")
-    rfm,diagnostics,profile,pca=rfm_and_segments()
-    print("K-means diagnostics:\n",diagnostics.to_string(index=False))
-    print("Segment profile:\n",profile.to_string(index=False)); print("PCA explained variance:",pca)
-    print("Lapse model summary:",build_lapse_model())
-    # print("\n=== PART C: TRIAGE ===")
-    # triage,summary=run_pipeline(prompt=FEW,token_budget=100000)
-    # print(summary); print(triage.head().to_string(index=False))
-    # print("\n=== PART D: POLICY RAG ===")
-    # rag=PolicyRAG(); print("chunks:",len(rag.chunks)); print(evaluate(rag).to_string(index=False))
-    # print("\nProject pipeline finished. Review outputs/ and data/instamart.db.")
-if __name__=="__main__": main()
+    segments, diagnostics, profile, explained_variance = rfm_and_segments()
+    print("RFM rows:", len(segments))
+    print(
+        "RFM summary:\n",
+        segments[["recency", "frequency", "monetary"]].agg(
+            ["mean", "median", "min", "max"]
+        ).to_string(),
+    )
+    print("K-means diagnostics:\n", diagnostics.to_string(index=False))
+    print("Segment profile:\n", profile.to_string(index=False))
+    print(
+        "PCA explained variance ratios:",
+        explained_variance,
+        "total:",
+        explained_variance.sum(),
+    )
+
+    report = build_lapse_model()
+    print(
+        "Cohort/split:",
+        report["cohort_rows"],
+        "customers;",
+        report["lapsed"],
+        "lapsed;",
+        report["train_rows"],
+        "train /",
+        report["test_rows"],
+        "test",
+    )
+    print("Baseline:", report["baseline"])
+    for model_name, metrics in report["models"].items():
+        print(f"{model_name.title()} grid-search and test metrics:", metrics)
+    print(
+        "Training-only scaled frequency mean:",
+        report["training_frequency_mean"],
+        "| full-cohort mean:",
+        report["full_cohort_frequency_mean"],
+    )
+    print("No missing transformed features:", report["no_missing_features"])
+    print(
+        "Balanced logistic (train class counts "
+        f"{report['balanced_training_class_counts']}):",
+        report["balanced_logistic"],
+    )
+    print("Top random-forest features:", report["top_forest_features"])
+    print("Logistic coefficients:", report["logistic_coefficients"])
+    print(
+        "Selected model:",
+        report["selected_model"],
+        "| reloaded predictions exact:",
+        report["persistence_matches"],
+    )
+    print("Retention list:\n", report["retention_list"].to_string(index=False))
+    print("True lapses in retention list:", report["retention_list_true_lapses"])
+    print(
+        "The retention list is illustrative and is not a leakage-free evaluation "
+        "because its Premium filter uses whole-window RFM."
+    )
+
+
+if __name__ == "__main__":
+    main()
