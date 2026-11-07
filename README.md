@@ -1,12 +1,20 @@
-# Overview:
+## Overview:
 Instamart Customer Intelligence & Support Copilot — CAPSTONE PROJECT. This is an assignment project of AIML by Arun Nivas
 
+## Repository map
+- `generate_data.py`: deterministic fictional CSV and policy generation.
+- `mock_llm.py`: offline stand-in for classification, policy answers and agent tool calls.
+- `src/data_pipeline.py`: audit, clean, SQLite load, validation.
+- `src/customer_models.py`: RFM, K-means, PCA, lapse model with train/test separation.
+- `src/triage.py`: token guardrails, PII redaction, retries, response validation, routing.
+- `src/policy_rag.py`: chunking, TF-IDF retrieval and grounded policy evaluation.
+- `src/refund_agent.py`: order lookup, refund calculation, ledger and bounded tool loop.
+- `sql/queries.sql`: seven SQL learning patterns.
+- `outputs/`: generated artifacts; `state/`: agent checkpoint examples.
 
-# Part A — Data Foundation: Clean, Store, Query 
+## Part A — Data Foundation: Clean, Store, Query 
 
-## Task 1.	Reproducible setup 
-
-### TEST Header
+### Task 1.	Reproducible setup 
 
 ```bash
 python -m venv .venv
@@ -20,14 +28,15 @@ python generate_data.py
 python run_project.py
 ```
 
--------------------------------------
 
-# Task 2: Audit the raw data 
-
+### Run Part A Independently 
 ```bash
- python data_pipeline.py
+ python data_pipeline.py  
  ```
 
+-------------------------------------
+
+### Task 2: Audit the raw data 
 
 orders.csv
 Raw rows:	13084
@@ -48,7 +57,7 @@ Blank gender: 30
 
 --------------------------------------
 
-# Task 3: City counts:
+### Task 3: City counts:
 Pune         227
 Delhi        210
 Bengaluru    197
@@ -68,7 +77,7 @@ Signup dates: all values parse as dates
 
 ------------------------------------------------
 
-# Task 4: Clean orders 
+### Task 4: Clean orders 
 
 ```bash
 # i. Convert order_ts to datetime
@@ -150,7 +159,7 @@ orders.loc[missing, "order_amount"] = (
 
 ----------------------------------------------------
 
-# Task 5 : Store and validate
+### Task 5 : Store and validate
 
 ```bash
 # Assumes customers, products, and orders are already cleaned DataFrames.
@@ -206,12 +215,12 @@ print("All validation checkpoints passed.")
 ----------------------------------------------------------
 
 
-# Task 6: SQL analysis 
+### Task 6: SQL analysis 
 
 Queries are stored in sql/queries.sql
 
 
-# Task 7: Pandas cross-check and city-level exploration
+### Task 7: Pandas cross-check and city-level exploration
 
 The pivot table reproduces Q2's completed-order revenue by city and product
 category. Its `All` row and column include the grand total; the assertion
@@ -293,7 +302,7 @@ The city aggregation reports the following completed-order statistics:
 ### PART A ENDS ###
 
 
-## PART B BEGINS ##
+## PART B — Customer Segments and Lapse Prediction  ##
 
 ### Reproduce Part B
 
