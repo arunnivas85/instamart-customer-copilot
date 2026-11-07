@@ -2,9 +2,11 @@
 Instamart Customer Intelligence & Support Copilot — CAPSTONE PROJECT. This is an assignment project of AIML by Arun Nivas
 
 
-## Part A — Data Foundation: Clean, Store, Query 
+# Part A — Data Foundation: Clean, Store, Query 
 
-# Task 1.	Reproducible setup 
+## Task 1.	Reproducible setup 
+
+### TEST Header
 
 ```bash
 python -m venv .venv
@@ -23,7 +25,7 @@ python run_project.py
 # Task 2: Audit the raw data 
 
 ```bash
- python data_pipeline.py > data_pipeline_output.txt
+ python data_pipeline.py
  ```
 
 
@@ -298,7 +300,7 @@ The city aggregation reports the following completed-order statistics:
 From the repository root, run:
 
 ```powershell
-python run_test.py
+python run_project.py
 ```
 
 The script uses `data/clean/orders.csv`, `data/clean/customers.csv`, and
@@ -586,7 +588,7 @@ This evaluates the policy assistant with 10-word overlap and with zero
 overlap, runs the seven refund scenarios and safety/resume demonstrations, and
 appends JSONL records to `outputs/agent_runs.jsonl` and
 `outputs/refund_ledger.jsonl`. Checkpoints are written under `state/`.
-`python run_test.py` also runs Part D after the earlier project parts.
+`python run_project.py` also runs Part D after the earlier project parts.
 Each run-log record includes the scenario ID, status, final answer, model calls,
 tokens, and every tool's name, arguments, and observation.
 

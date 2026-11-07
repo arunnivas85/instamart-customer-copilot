@@ -1,11 +1,17 @@
-"""Run Part B segmentation/lapse modeling and Part C support triage."""
+"""Run Part A (Audit, Clean, validate), Part B (segmentation/lapse modeling), and Part C (support triage) and Part D (policy RAG and refund agent)."""
 
+from src.data_pipeline import audit,clean_data,validate
 from src.customer_models import build_lapse_model, rfm_and_segments
 from src.triage import compare_prompts
 from src.refund_agent import run_part_d
 
 
 def main():
+
+    print("\n=== PART A: AUDIT / CLEAN / VALIDATE ===")
+    audit(); clean_data(); validate()
+
+    print("\n=== PART B: SEGMENTS ===")
     segments, diagnostics, profile, explained_variance = rfm_and_segments()
     print("RFM rows:", len(segments))
     print(
