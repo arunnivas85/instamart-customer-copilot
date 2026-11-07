@@ -308,8 +308,8 @@ The city aggregation reports the following completed-order statistics:
 
 From the repository root, run:
 
-```powershell
-python run_project.py
+```bash
+python customer_models.py
 ```
 
 The script uses `data/clean/orders.csv`, `data/clean/customers.csv`, and
@@ -481,13 +481,13 @@ time-based validation and an independently defined, pre-cutoff premium cohort.
 ## PART B ENDS ##
 
 
-## PART C BEGINS ##
+## PART C - Support Ticket Triage with Guardrails  ##
 
 ### Reproduce Part C
 
 After Part B has produced `outputs/customer_segments.csv`, run:
 
-```powershell
+```bash
 python -m src.triage
 ```
 
@@ -583,13 +583,13 @@ from tickets requiring human review; no invalid answer is silently guessed.
 ## PART C ENDS ##
 
 
-## PART D BEGINS ##
+## PART D - Policy RAG Assistant and Refund Agent ##
 
 ### Reproduce Part D
 
 After Part A has created `data/instamart.db`, run:
 
-```powershell
+```bash
 python -m src.refund_agent
 ```
 
