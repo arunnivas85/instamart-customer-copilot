@@ -299,7 +299,7 @@ The city aggregation reports the following completed-order statistics:
 | Mumbai | 479,058.50 | 297.00 | 1,613 |
 | Pune | 500,918.05 | 252.48 | 1,984 |
 
-### PART A ENDS ###
+
 
 
 ## PART B — Customer Segments and Lapse Prediction  ##
@@ -478,7 +478,7 @@ illustrative and not a leakage-free evaluation; it must not be used to claim
 prospective campaign performance. Evaluate future campaign outcomes with
 time-based validation and an independently defined, pre-cutoff premium cohort.
 
-## PART B ENDS ##
+
 
 
 ## PART C - Support Ticket Triage with Guardrails  ##
@@ -580,7 +580,7 @@ customer missing from the Part B segment file is treated as non-Premium.
 Therefore the outputs explicitly distinguish rule-validated classifications
 from tickets requiring human review; no invalid answer is silently guessed.
 
-## PART C ENDS ##
+
 
 
 ## PART D - Policy RAG Assistant and Refund Agent ##
@@ -703,4 +703,3 @@ manageable for short requests, and each next action is conditioned on the
 verified database and policy observations. The durable per-tool checkpoints
 also make this sequence resumable without replaying completed actions.
 
-## PART D ENDS ##
