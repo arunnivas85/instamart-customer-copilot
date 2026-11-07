@@ -468,3 +468,105 @@ prospective campaign performance. Evaluate future campaign outcomes with
 time-based validation and an independently defined, pre-cutoff premium cohort.
 
 ## PART B ENDS ##
+
+
+## PART C BEGINS ##
+
+### Reproduce Part C
+
+After Part B has produced `outputs/customer_segments.csv`, run:
+
+```powershell
+python -m src.triage
+```
+
+This processes `data/raw/tickets.csv` in file order using the supplied offline
+`mock_llm.py`. It runs the zero-shot and few-shot comparisons, creates the
+6000-token zero-shot budget demo, and writes the final 100000-token few-shot
+output to `outputs/triage_results.csv`. The budget demo is written to
+`outputs/triage_budget_demo.csv`.
+
+### Input safety, redaction, and validation
+
+All 164 ticket texts are redacted before eligibility checks; substitutions are
+applied in order: email to `[EMAIL]`, phone to `[PHONE]`, then order ID to
+`[ORDER_ID]`. The run found 55 email, 91 phone, and 132 order-ID substitutions
+(278 total). It reapplies all three expressions to every redacted text and
+asserts that there are zero remaining matches. Before each model call, the
+code also asserts that the user message is exactly the redacted ticket text and
+that neither the system nor user message contains any of the three patterns.
+Empty/whitespace-only tickets are marked `skipped_empty`, and tickets whose
+estimated input exceeds 400 tokens are marked `flagged_long`; neither is sent
+to the model. The data contains four of each, and each long ticket estimates
+to 734 tokens.
+
+Both system prompts contain `CLASSIFY`, the four allowed categories
+(`billing`, `delivery`, `technical`, `fraud`), and a JSON-only response shape.
+The zero-shot prompt has no `EXAMPLES:` section. The few-shot prompt includes
+three labeled examples, including a fraud example. Invalid JSON is accepted
+only when regex-extracted lowercase words contain exactly one distinct allowed
+category; valid JSON with an unsupported category and all other invalid
+answers are flagged rather than guessed.
+
+Every model call is retried up to three times on `TransientLLMError`, with
+exponential backoff and jitter (`0.05 * 2**n * random.uniform(0.9, 1.15)`)
+and one ticket/retry/wait log line. The mock produces 19 transient errors per
+full run, all recovered on retry 0; waits are between 0.045 and 0.0575 seconds.
+`mock_llm.reset()` runs at the start of each pipeline pass.
+
+| Full run status | Zero-shot | Few-shot |
+|---|---:|---:|
+| `classified_json` | 135 | 135 |
+| `classified_keyword` | 12 | 12 |
+| `flagged_invalid_output` | 9 | 9 |
+| `skipped_empty` | 4 | 4 |
+| `flagged_long` | 4 | 4 |
+
+### Prompt comparison
+
+Accuracy is measured against `true_category` for classified tickets only;
+token totals sum `response.usage.total_tokens`, including prompt and completion
+tokens.
+
+| Prompt | Classified | Correct | Accuracy | Total tokens | Tokens per classified ticket |
+|---|---:|---:|---:|---:|---:|
+| Zero-shot | 147 | 126 | 85.7% | 9,556 | 65.01 |
+| Few-shot | 147 | 147 | 100.0% | 17,044 | 115.95 |
+
+Zero-shot confusion table (classified tickets; rows are true categories):
+
+| True \ Predicted | Billing | Delivery | Technical | Fraud |
+|---|---:|---:|---:|---:|
+| Billing | 38 | 0 | 0 | 0 |
+| Delivery | 0 | 36 | 0 | 0 |
+| Technical | 10 | 0 | 29 | 0 |
+| Fraud | 11 | 0 | 0 | 23 |
+
+The zero-shot run classified 147 tickets correctly 126 times (85.7%) at 9,556
+tokens, or 65.01 tokens per classified ticket. The few-shot run classified the
+same 147 tickets correctly 147 times (100.0%) at 17,044 tokens, or 115.95
+tokens per classified ticket. That is 50.94 extra tokens per classified ticket
+and 7,488 extra tokens overall to correct all 21 errors, including 11 fraud
+and 10 technical tickets otherwise routed as billing, which is worthwhile
+when routing accuracy and fraud handling outweigh the additional prompt cost.
+
+### Budget, routing, and human review
+
+The zero-shot budget demo uses a 6,000-token budget and produces 58
+`budget_exhausted` tickets. The budget is checked before each call, so the
+last completed response can take the running total slightly past the threshold
+(6,017 tokens here); no later tickets are sent after the threshold is reached.
+
+The final `outputs/triage_results.csv` is the 100,000-token few-shot run and
+has one row for each of the 164 tickets with columns `ticket_id`,
+`customer_id`, `status`, `category`, `segment_name`, `priority`, `route`, and
+`tokens_used`. Results with `classified_json` or `classified_keyword` have
+passed the specified category validation and are routed to `security_team`
+for fraud, `premium_desk` for other Premium customers, or `support_queue`
+otherwise. Empty, long, invalid-output, and budget-exhausted tickets are not
+classified for routing: they go to `human_review` at NORMAL priority. A
+customer missing from the Part B segment file is treated as non-Premium.
+Therefore the outputs explicitly distinguish rule-validated classifications
+from tickets requiring human review; no invalid answer is silently guessed.
+
+## PART C ENDS ##

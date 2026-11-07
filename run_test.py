@@ -1,6 +1,7 @@
-"""Run Part B segmentation, lapse modeling, and artifact generation."""
+"""Run Part B segmentation/lapse modeling and Part C support triage."""
 
 from src.customer_models import build_lapse_model, rfm_and_segments
+from src.triage import compare_prompts
 
 
 def main():
@@ -63,6 +64,12 @@ def main():
         "because its Premium filter uses whole-window RFM."
     )
 
+    print("\n=== PART C: TRIAGE ===")
+    triage = compare_prompts()
+    print("Zero-shot:", triage["zero_shot"])
+    print("Zero-shot confusion matrix:\n", triage["zero_shot_confusion"])
+    print("Few-shot:", triage["few_shot"])
+    print("6000-token zero-shot budget demo:", triage["budget_demo"])
 
 if __name__ == "__main__":
     main()
